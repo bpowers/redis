@@ -126,6 +126,21 @@ void zfree_no_tcache(void *ptr) {
 }
 #endif
 
+#ifdef HAVE_AUTO_DEFRAG
+void zmalloc_init(void) {
+    size_t orig_period = 0;
+    size_t orig_len = sizeof(size_t);
+    size_t new_period = 0;
+
+    // disable on-line mesh checks -- just do it on demand.
+    mesh_mallctl("mesh.check_period", &orig_period, &orig_len, &new_period, sizeof(size_t));
+}
+#else /* HAVE_AUTO_DEFRAG */
+void zmalloc_init(void) {
+    /* no-op for non-mesh allocators */
+}
+#endif
+
 void *zcalloc(size_t size) {
     void *ptr = calloc(1, size+PREFIX_SIZE);
 

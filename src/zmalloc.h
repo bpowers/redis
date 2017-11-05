@@ -51,6 +51,7 @@
 #if (JEMALLOC_VERSION_MAJOR == 2 && JEMALLOC_VERSION_MINOR >= 1) || (JEMALLOC_VERSION_MAJOR > 2)
 #define HAVE_MALLOC_SIZE 1
 #define zmalloc_size(p) je_malloc_usable_size(p)
+#define zmalloc_mallctl(name, o, ol, n, nl) je_mallctl(name, o, ol, n, nl)
 #else
 #error "Newer version of jemalloc required"
 #endif
@@ -58,9 +59,10 @@
 #elif defined(USE_MESH)
 #define ZMALLOC_LIB ("mesh-" __xstr(MESH_VERSION_MAJOR) "." __xstr(MESH_VERSION_MINOR))
 #include <plasma/mesh.h>
+#define HAVE_AUTO_DEFRAG 1
 #define HAVE_MALLOC_SIZE 1
-#define HAVE_AUTO_DEFRAG
 #define zmalloc_size(p) mesh_usable_size(p)
+#define zmalloc_mallctl(name, o, ol, n, nl) mesh_mallctl(name, o, ol, n, nl)
 
 #elif defined(__APPLE__)
 #include <malloc/malloc.h>
@@ -79,6 +81,7 @@
 #define HAVE_MANUAL_DEFRAG
 #endif
 
+void zmalloc_init(void);
 void *zmalloc(size_t size);
 void *zcalloc(size_t size);
 void *zrealloc(void *ptr, size_t size);

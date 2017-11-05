@@ -39,6 +39,45 @@
 #include <assert.h>
 #include <stddef.h>
 
+/* code shared between manual and auto approaches */
+#if defined(HAVE_MANUAL_DEFRAG) || defined(HAVE_AUTO_DEFRAG)
+
+/* Utility function to get the fragmentation ratio from jemalloc.
+ * It is critical to do that by comparing only heap maps that belown to
+ * jemalloc, and skip ones the jemalloc keeps as spare. Since we use this
+ * fragmentation ratio in order to decide if a defrag action should be taken
+ * or not, a false detection can cause the defragmenter to waste a lot of CPU
+ * without the possibility of getting any results. */
+float getAllocatorFragmentation(size_t *out_frag_bytes) {
+    size_t epoch = 1, allocated = 0, resident = 0, active = 0, sz = sizeof(size_t);
+    /* Update the statistics cached by mallctl. */
+    zmalloc_mallctl("epoch", &epoch, &sz, &epoch, sz);
+    /* Unlike RSS, this does not include RSS from shared libraries and other non
+     * heap mappings. */
+    zmalloc_mallctl("stats.resident", &resident, &sz, NULL, 0);
+    /* Unlike resident, this doesn't not include the pages jemalloc reserves
+     * for re-use (purge will clean that). */
+    zmalloc_mallctl("stats.active", &active, &sz, NULL, 0);
+    /* Unlike zmalloc_used_memory, this matches the stats.resident by taking
+     * into account all allocations done by this process (not only zmalloc). */
+    zmalloc_mallctl("stats.allocated", &allocated, &sz, NULL, 0);
+    float frag_pct = ((float)active / allocated)*100 - 100;
+    size_t frag_bytes = active - allocated;
+    float rss_pct = ((float)resident / allocated)*100 - 100;
+    size_t rss_bytes = resident - allocated;
+    if(out_frag_bytes)
+        *out_frag_bytes = frag_bytes;
+    serverLog(LL_DEBUG,
+        "allocated=%zu, active=%zu, resident=%zu, frag=%.0f%% (%.0f%% rss), frag_bytes=%zu (%zu%% rss)",
+        allocated, active, resident, frag_pct, rss_pct, frag_bytes, rss_bytes);
+    return frag_pct;
+}
+
+#define INTERPOLATE(x, x1, x2, y1, y2) ( (y1) + ((x)-(x1)) * ((y2)-(y1)) / ((x2)-(x1)) )
+#define LIMIT(y, min, max) ((y)<(min)? min: ((y)>(max)? max: (y)))
+
+#endif
+
 #if defined(HAVE_MANUAL_DEFRAG)
 
 /* this method was added to jemalloc in order to help us understand which
@@ -438,40 +477,6 @@ void defragDictBucketCallback(void *privdata, dictEntry **bucketref) {
     }
 }
 
-/* Utility function to get the fragmentation ratio from jemalloc.
- * It is critical to do that by comparing only heap maps that belown to
- * jemalloc, and skip ones the jemalloc keeps as spare. Since we use this
- * fragmentation ratio in order to decide if a defrag action should be taken
- * or not, a false detection can cause the defragmenter to waste a lot of CPU
- * without the possibility of getting any results. */
-float getAllocatorFragmentation(size_t *out_frag_bytes) {
-    size_t epoch = 1, allocated = 0, resident = 0, active = 0, sz = sizeof(size_t);
-    /* Update the statistics cached by mallctl. */
-    je_mallctl("epoch", &epoch, &sz, &epoch, sz);
-    /* Unlike RSS, this does not include RSS from shared libraries and other non
-     * heap mappings. */
-    je_mallctl("stats.resident", &resident, &sz, NULL, 0);
-    /* Unlike resident, this doesn't not include the pages jemalloc reserves
-     * for re-use (purge will clean that). */
-    je_mallctl("stats.active", &active, &sz, NULL, 0);
-    /* Unlike zmalloc_used_memory, this matches the stats.resident by taking
-     * into account all allocations done by this process (not only zmalloc). */
-    je_mallctl("stats.allocated", &allocated, &sz, NULL, 0);
-    float frag_pct = ((float)active / allocated)*100 - 100;
-    size_t frag_bytes = active - allocated;
-    float rss_pct = ((float)resident / allocated)*100 - 100;
-    size_t rss_bytes = resident - allocated;
-    if(out_frag_bytes)
-        *out_frag_bytes = frag_bytes;
-    serverLog(LL_DEBUG,
-        "allocated=%zu, active=%zu, resident=%zu, frag=%.0f%% (%.0f%% rss), frag_bytes=%zu (%zu%% rss)",
-        allocated, active, resident, frag_pct, rss_pct, frag_bytes, rss_bytes);
-    return frag_pct;
-}
-
-#define INTERPOLATE(x, x1, x2, y1, y2) ( (y1) + ((x)-(x1)) * ((y2)-(y1)) / ((x2)-(x1)) )
-#define LIMIT(y, min, max) ((y)<(min)? min: ((y)>(max)? max: (y)))
-
 /* Perform incremental defragmentation work from the serverCron.
  * This works in a similar way to activeExpireCycle, in the sense that
  * we do incremental work across calls. */
@@ -573,7 +578,60 @@ void activeDefragCycle(void) {
 #elif defined(HAVE_AUTO_DEFRAG)
 
 void activeDefragCycle(void) {
-    /* Not implemented yet -- call into mesh */
+    static long long start_scan;
+    size_t old = 0, sz = sizeof(size_t);
+
+    if (server.aof_child_pid!=-1 || server.rdb_child_pid!=-1)
+        return; /* Defragging memory while there's a fork will just do damage. */
+
+    /* Once a second, check if we the fragmentation justfies starting a scan
+     * or making it more aggressive. */
+    run_with_period(1000) {
+        size_t frag_bytes;
+        float frag_pct = getAllocatorFragmentation(&frag_bytes);
+        /* If we're not already running, and below the threshold, exit. */
+        if (!server.active_defrag_running) {
+            if(frag_pct < server.active_defrag_threshold_lower || frag_bytes < server.active_defrag_ignore_bytes)
+                return;
+        }
+
+        /* Calculate the adaptive aggressiveness of the defrag */
+        int cpu_pct = INTERPOLATE(frag_pct,
+                server.active_defrag_threshold_lower,
+                server.active_defrag_threshold_upper,
+                server.active_defrag_cycle_min,
+                server.active_defrag_cycle_max);
+        cpu_pct = LIMIT(cpu_pct,
+                server.active_defrag_cycle_min,
+                server.active_defrag_cycle_max);
+         /* We allow increasing the aggressiveness during a scan, but don't
+          * reduce it. */
+        if (!server.active_defrag_running ||
+            cpu_pct > server.active_defrag_running)
+        {
+            server.active_defrag_running = cpu_pct;
+            serverLog(LL_VERBOSE,
+                "Starting active defrag, frag=%.0f%%, frag_bytes=%zu, cpu=%d%%",
+                frag_pct, frag_bytes, cpu_pct);
+        }
+    }
+    if (!server.active_defrag_running)
+        return;
+
+    start_scan = ustime();
+
+    zmalloc_mallctl("mesh.compact", &old, &sz, &old, sz);
+    server.active_defrag_running = 0;
+
+    {
+        long long now = ustime();
+        size_t frag_bytes;
+        float frag_pct = getAllocatorFragmentation(&frag_bytes);
+        serverLog(LL_VERBOSE,
+                  "Active mesh defrag done in %dms, frag=%.0f%%, frag_bytes=%zu",
+                  (int)((now - start_scan)/1000), frag_pct, frag_bytes);
+        return;
+    }
 }
 
 #else
