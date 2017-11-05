@@ -55,6 +55,12 @@
 #error "Newer version of jemalloc required"
 #endif
 
+#elif defined(USE_MESH)
+#define ZMALLOC_LIB ("mesh-" __xstr(MESH_VERSION_MAJOR) "." __xstr(MESH_VERSION_MINOR))
+#include <plasma/mesh.h>
+#define HAVE_MALLOC_SIZE 1
+#define zmalloc_size(p) mesh_usable_size(p)
+
 #elif defined(__APPLE__)
 #include <malloc/malloc.h>
 #define HAVE_MALLOC_SIZE 1

@@ -52,6 +52,10 @@ ifeq ($(USE_TCMALLOC_MINIMAL),yes)
 	MALLOC=tcmalloc_minimal
 endif
 
+ifeq ($(USE_MESH),yes)
+	MALLOC=mesh
+endif
+
 ifeq ($(USE_JEMALLOC),yes)
 	MALLOC=jemalloc
 endif
@@ -117,6 +121,11 @@ endif
 ifeq ($(MALLOC),tcmalloc_minimal)
 	FINAL_CFLAGS+= -DUSE_TCMALLOC
 	FINAL_LIBS+= -ltcmalloc_minimal
+endif
+
+ifeq ($(MALLOC),mesh)
+	FINAL_CFLAGS+= -DUSE_MESH
+	FINAL_LIBS+= -lmesh
 endif
 
 ifeq ($(MALLOC),jemalloc)
