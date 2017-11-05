@@ -39,7 +39,7 @@
 #include <assert.h>
 #include <stddef.h>
 
-#ifdef HAVE_DEFRAG
+#if defined(HAVE_MANUAL_DEFRAG)
 
 /* this method was added to jemalloc in order to help us understand which
  * pointers are worthwhile moving and which aren't */
@@ -570,7 +570,13 @@ void activeDefragCycle(void) {
     } while(1);
 }
 
-#else /* HAVE_DEFRAG */
+#elif defined(HAVE_AUTO_DEFRAG)
+
+void activeDefragCycle(void) {
+    /* Not implemented yet -- call into mesh */
+}
+
+#else
 
 void activeDefragCycle(void) {
     /* Not implemented yet. */

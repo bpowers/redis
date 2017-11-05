@@ -1007,7 +1007,7 @@ void configSetCommand(client *c) {
       "activerehashing",server.activerehashing) {
     } config_set_bool_field(
       "activedefrag",server.active_defrag_enabled) {
-#ifndef HAVE_DEFRAG
+#if !(defined(HAVE_MANUAL_DEFRAG) || defined(HAVE_AUTO_DEFRAG))
         if (server.active_defrag_enabled) {
             server.active_defrag_enabled = 0;
             addReplyError(c,

@@ -59,6 +59,7 @@
 #define ZMALLOC_LIB ("mesh-" __xstr(MESH_VERSION_MAJOR) "." __xstr(MESH_VERSION_MINOR))
 #include <plasma/mesh.h>
 #define HAVE_MALLOC_SIZE 1
+#define HAVE_AUTO_DEFRAG
 #define zmalloc_size(p) mesh_usable_size(p)
 
 #elif defined(__APPLE__)
@@ -75,7 +76,7 @@
  * and the version used is our special version modified for Redis having
  * the ability to return per-allocation fragmentation hints. */
 #if defined(USE_JEMALLOC) && defined(JEMALLOC_FRAG_HINT)
-#define HAVE_DEFRAG
+#define HAVE_MANUAL_DEFRAG
 #endif
 
 void *zmalloc(size_t size);
@@ -92,7 +93,7 @@ size_t zmalloc_get_smap_bytes_by_field(char *field, long pid);
 size_t zmalloc_get_memory_size(void);
 void zlibc_free(void *ptr);
 
-#ifdef HAVE_DEFRAG
+#ifdef HAVE_MANUAL_DEFRAG
 void zfree_no_tcache(void *ptr);
 void *zmalloc_no_tcache(size_t size);
 #endif
