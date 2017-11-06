@@ -51,6 +51,7 @@
 #if (JEMALLOC_VERSION_MAJOR == 2 && JEMALLOC_VERSION_MINOR >= 1) || (JEMALLOC_VERSION_MAJOR > 2)
 #define HAVE_MALLOC_SIZE 1
 #define zmalloc_size(p) je_malloc_usable_size(p)
+#define HAVE_MALLCTL 1
 #define zmalloc_mallctl(name, o, ol, n, nl) je_mallctl(name, o, ol, n, nl)
 #else
 #error "Newer version of jemalloc required"
@@ -62,6 +63,7 @@
 #define HAVE_AUTO_DEFRAG 1
 #define HAVE_MALLOC_SIZE 1
 #define zmalloc_size(p) mesh_usable_size(p)
+#define HAVE_MALLCTL 1
 #define zmalloc_mallctl(name, o, ol, n, nl) mesh_mallctl(name, o, ol, n, nl)
 
 #elif defined(__APPLE__)
