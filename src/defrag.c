@@ -64,12 +64,18 @@ float getAllocatorFragmentation(size_t *out_frag_bytes) {
     float frag_pct = ((float)active / allocated)*100 - 100;
     size_t frag_bytes = active - allocated;
     float rss_pct = ((float)resident / allocated)*100 - 100;
-    size_t rss_bytes = resident - allocated;
+    size_t rss_bytes = resident - active;
+
+    double allocated_mb = allocated/1024.0/1024.0;
+    double active_mb = active/1024.0/1024.0;
+    double resident_mb = resident/1024.0/1024.0;
+    double frag_bytes_mb = frag_bytes/1024.0/1024.0;
+    double rss_bytes_mb = rss_bytes/1024.0/1024.0;
     if(out_frag_bytes)
         *out_frag_bytes = frag_bytes;
-    serverLog(LL_DEBUG,
-        "allocated=%zu, active=%zu, resident=%zu, frag=%.0f%% (%.0f%% rss), frag_bytes=%zu (%zu%% rss)",
-        allocated, active, resident, frag_pct, rss_pct, frag_bytes, rss_bytes);
+    serverLog(LL_VERBOSE,
+        "allocated=%.1f, active=%.1f, resident=%.1f, frag=%.0f%% (%.0f%% rss), frag_bytes=%.1f (%.1f extra rss)",
+        allocated_mb, active_mb, resident_mb, frag_pct, rss_pct, frag_bytes_mb, rss_bytes_mb);
     return frag_pct;
 }
 
@@ -589,6 +595,7 @@ void activeDefragCycle(void) {
     run_with_period(1000) {
         size_t frag_bytes;
         float frag_pct = getAllocatorFragmentation(&frag_bytes);
+
         /* If we're not already running, and below the threshold, exit. */
         if (!server.active_defrag_running) {
             if(frag_pct < server.active_defrag_threshold_lower || frag_bytes < server.active_defrag_ignore_bytes)
@@ -606,8 +613,8 @@ void activeDefragCycle(void) {
                 server.active_defrag_cycle_max);
          /* We allow increasing the aggressiveness during a scan, but don't
           * reduce it. */
-        if (!server.active_defrag_running ||
-            cpu_pct > server.active_defrag_running)
+        /* if (!server.active_defrag_running || */
+        /*     cpu_pct > server.active_defrag_running) */
         {
             server.active_defrag_running = cpu_pct;
             serverLog(LL_VERBOSE,
