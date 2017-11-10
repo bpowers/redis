@@ -12,52 +12,7 @@ source tests/support/test.tcl
 source tests/support/util.tcl
 
 set ::all_tests {
-    unit/printver
-    unit/dump
-    unit/auth
-    unit/protocol
-    unit/keyspace
-    unit/scan
-    unit/type/string
-    unit/type/incr
-    unit/type/list
-    unit/type/list-2
-    unit/type/list-3
-    unit/type/set
-    unit/type/zset
-    unit/type/hash
-    unit/sort
-    unit/expire
-    unit/other
-    unit/multi
-    unit/quit
-    unit/aofrw
-    integration/replication
-    integration/replication-2
-    integration/replication-3
-    integration/replication-4
-    integration/replication-psync
-    integration/aof
-    integration/rdb
-    integration/convert-zipmap-hash-on-load
-    integration/logging
-    integration/psync2
-    integration/psync2-reg
-    unit/pubsub
-    unit/slowlog
-    unit/scripting
-    unit/maxmemory
-    unit/introspection
-    unit/introspection-2
-    unit/limits
-    unit/obuf-limits
-    unit/bitops
-    unit/bitfield
-    unit/geo
     unit/memefficiency
-    unit/hyperloglog
-    unit/lazyfree
-    unit/wait
 }
 # Index to the next test to run in the ::all_tests list.
 set ::next_test 0
@@ -172,11 +127,11 @@ proc s {args} {
 }
 
 proc cleanup {} {
-    if {!$::quiet} {puts -nonewline "Cleanup: may take some time... "}
-    flush stdout
-    catch {exec rm -rf {*}[glob tests/tmp/redis.conf.*]}
-    catch {exec rm -rf {*}[glob tests/tmp/server.*]}
-    if {!$::quiet} {puts "OK"}
+    # if {!$::quiet} {puts -nonewline "Cleanup: may take some time... "}
+    # flush stdout
+    # catch {exec rm -rf {*}[glob tests/tmp/redis.conf.*]}
+    # catch {exec rm -rf {*}[glob tests/tmp/server.*]}
+    # if {!$::quiet} {puts "OK"}
 }
 
 proc test_server_main {} {
