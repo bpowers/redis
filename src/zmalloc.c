@@ -244,7 +244,7 @@ void zmalloc_set_oom_handler(void (*oom_handler)(size_t)) {
  * function RedisEstimateRSS() that is a much faster (and less precise)
  * version of the function. */
 
-#if defined(HAVE_MALLCTL)
+#if defined(HAVE_MALLCTL) && defined(USE_MESH)
 size_t zmalloc_get_rss(void) {
     size_t resident = 0, sz = sizeof(size_t);
 
